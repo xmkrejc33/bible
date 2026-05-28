@@ -17,6 +17,14 @@
         h1 {
             text-align: center;
             color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        .status-cteni {
+            text-align: center;
+            color: #7f8c8d;
+            font-size: 0.9em;
+            margin-bottom: 25px;
+            min-height: 20px;
         }
         #zobrazeni-versu {
             background: white;
@@ -39,7 +47,6 @@
             text-align: center;
         }
         button {
-            background-color: #3498db;
             color: white;
             border: none;
             padding: 12px 24px;
@@ -47,12 +54,22 @@
             border-radius: 5px;
             cursor: pointer;
             transition: background-color 0.3s;
+            margin: 5px;
         }
-        button:hover {
+        #dalsiTlacitko {
+            background-color: #3498db;
+        }
+        #dalsiTlacitko:hover {
             background-color: #2980b9;
         }
+        #resetTlacitko {
+            background-color: #e74c3c;
+        }
+        #resetTlacitko:hover {
+            background-color: #c0392b;
+        }
         button:disabled {
-            background-color: #bdc3c7;
+            background-color: #bdc3c7 !important;
             cursor: not-allowed;
         }
         .nacitani {
@@ -65,6 +82,7 @@
 <body>
 
     <h1>Český ekumenický překlad</h1>
+    <div id="statusCteni" class="status-cteni">Připojování ke cloudu...</div>
     
     <div id="zobrazeni-versu">
         <p class="nacitani">Načítám texty ze souboru bible.txt...</p>
@@ -72,67 +90,136 @@
 
     <div class="tlacitka">
         <button id="dalsiTlacitko" onclick="zobrazDalsich5()" disabled>Dalších 5 veršů</button>
+        <button id="resetTlacitko" onclick="resetovatCteni()" disabled>Od začátku</button>
     </div>
 
     <script>
+        // ==========================================
+        // NASTAVENÍ CLOUDU (Zadejte svůj kód z keyvalue.immanuel.co)
+        const APP_KEY = "db697h0o"; 
+        // ==========================================
+
+        const API_BASE = "https://keyvalue.immanuel.co/api/KeyVal";
+        const DATA_KLIC = "pozice_cteni"; // Pod tímto slovem se uloží vaše číslo
+        
         let vsechnyVerse = [];
-let aktualniIndex = 0;
-const pocetNaKliknuti = 5;
+        let aktualniIndex = 0;
+        const pocetNaKliknuti = 5;
 
-// Funkce pro načtení textového souboru z GitHubu
-async function nactiTextBible() {
-    try {
-        const odpoved = await fetch('bible.txt');
-        
-        if (!odpoved.ok) {
-            throw new Error("Soubor se nepodařilo najít.");
+        // Načtení textu a pozice z cloudu
+        async function nactiTextBible() {
+            try {
+                // 1. Načtení samotných textů z GitHubu
+                const odpoved = await fetch('bible.txt');
+                if (!odpoved.ok) throw new Error("Soubor bible.txt se nepodařilo najít.");
+                
+                const celyText = await odpoved.text();
+                vsechnyVerse = celyText.split(/\r?\n/)
+                    .map(radek => radek.trim())
+                    .filter(radek => /^[0-9]/.test(radek));
+                
+                // 2. Kontrola, zda uživatel zadal kód
+                if (APP_KEY === "ZDE_VLOZTE_SVUJ_KOD" || APP_KEY === "") {
+                    document.getElementById("statusCteni").innerHTML = "<span style='color:red'>Upozornění: Nevložili jste kód schránky. Čtení se nebude ukládat.</span>";
+                } else {
+                    // 3. Přečtení uložené pozice z immanuel.co
+                    try {
+                        const cloudOdpoved = await fetch(`${API_BASE}/GetValue/${APP_KEY}/${DATA_KLIC}`);
+                        if (cloudOdpoved.ok) {
+                            const textOdpovedi = await cloudOdpoved.text();
+                            const cistaHodnota = textOdpovedi.replace(/["\s]/g, ''); // Odstranění formátování
+                            
+                            if (cistaHodnota !== "null" && cistaHodnota !== "") {
+                                const ulozenaHodnota = parseInt(cistaHodnota, 10);
+                                if (!isNaN(ulozenaHodnota) && ulozenaHodnota < vsechnyVerse.length) {
+                                    aktualniIndex = ulozenaHodnota;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn("Nepodařilo se načíst pozici z cloudu, začíná se od nuly.");
+                    }
+                }
+
+                // Povolení tlačítek a první zobrazení
+                document.getElementById("dalsiTlacitko").disabled = false;
+                document.getElementById("resetTlacitko").disabled = false;
+                
+                aktualizujStatus("Načteno z cloudu");
+                zobrazDalsich5(false); 
+
+            } catch (chyba) {
+                document.getElementById("zobrazeni-versu").innerHTML = 
+                    `<p style="color: red; text-align: center;">Chyba: ${chyba.message}</p>`;
+                document.getElementById("statusCteni").innerText = "";
+            }
         }
-        
-        const celyText = await odpoved.text();
-        
-        // Rozdělení textu, ořezání mezer a filtrace pomocí regulárního výrazu
-        vsechnyVerse = celyText.split(/\r?\n/)
-            .map(radek => radek.trim()) // Odstraní mezery a neviditelné znaky na začátku a konci
-            .filter(radek => /^[0-9]/.test(radek)); // Propustí POUZE řádky začínající číslem 0-9
-        
-        // Povolení tlačítka a zobrazení první pětice
-        document.getElementById("dalsiTlacitko").disabled = false;
-        document.getElementById("zobrazeni-versu").innerHTML = ""; // Vymaže hlášku o načítání
-        zobrazDalsich5();
 
-    } catch (chyba) {
-        document.getElementById("zobrazeni-versu").innerHTML = 
-            `<p style="color: red; text-align: center;">Chyba: Nepodařilo se načíst soubor <b>bible.txt</b>. Ujistěte se, že je nahraný v repozitáři.</p>`;
-    }
-}
+        // Zobrazení 5 veršů a odeslání pozice do cloudu
+        async function zobrazDalsich5(ulozitDoCloudu = true) {
+            const kontejner = document.getElementById("zobrazeni-versu");
+            const tlacitko = document.getElementById("dalsiTlacitko");
+            
+            if (vsechnyVerse.length === 0) return;
+            kontejner.innerHTML = ""; 
 
-// Funkce pro zobrazení další dávky veršů
-function zobrazDalsich5() {
-    const kontejner = document.getElementById("zobrazeni-versu");
-    const tlacitko = document.getElementById("dalsiTlacitko");
-    
-    kontejner.innerHTML = ""; // Vymazání stávajících veršů
+            const konecIndex = Math.min(aktualniIndex + pocetNaKliknuti, vsechnyVerse.length);
 
-    const konecIndex = Math.min(aktualniIndex + pocetNaKliknuti, vsechnyVerse.length);
+            for (let i = aktualniIndex; i < konecIndex; i++) {
+                const odstavec = document.createElement("p");
+                odstavec.className = "vers";
+                odstavec.innerText = vsechnyVerse[i];
+                kontejner.appendChild(odstavec);
+            }
 
-    for (let i = aktualniIndex; i < konecIndex; i++) {
-        const odstavec = document.createElement("p");
-        odstavec.className = "vers";
-        odstavec.innerText = vsechnyVerse[i]; 
-        kontejner.appendChild(odstavec);
-    }
+            aktualniIndex += pocetNaKliknuti;
 
-    aktualniIndex += pocetNaKliknuti;
+            if (aktualniIndex >= vsechnyVerse.length) {
+                tlacitko.innerText = "Jste na konci textu";
+                tlacitko.disabled = true;
+            }
 
-    // Kontrola konce souboru
-    if (aktualniIndex >= vsechnyVerse.length) {
-        tlacitko.innerText = "Jste na konci textu";
-        tlacitko.disabled = true;
-    }
-}
+            // Odeslání nové pozice do nástěnky
+            if (ulozitDoCloudu && APP_KEY !== "ZDE_VLOZTE_SVUJ_KOD") {
+                aktualizujStatus("Ukládám pozici...");
+                try {
+                    await fetch(`${API_BASE}/UpdateValue/${APP_KEY}/${DATA_KLIC}/${aktualniIndex}`, {
+                        method: 'POST'
+                    });
+                    aktualizujStatus("Uloženo napříč zařízeními");
+                } catch (e) {
+                    aktualizujStatus("Chyba při ukládání (jste offline?)");
+                }
+            }
+        }
 
-// Spuštění načítání ihned po otevření stránky
-window.onload = nactiTextBible;
+        function aktualizujStatus(zprava) {
+            const statusZáložka = document.getElementById("statusCteni");
+            if (aktualniIndex === 0) {
+                statusZáložka.innerText = "Čtete od začátku";
+            } else {
+                statusZáložka.innerText = `${zprava} (čekají verše od pozice ${aktualniIndex + 1})`;
+            }
+        }
+
+        async function resetovatCteni() {
+            if (confirm("Opravdu chcete začít od začátku? Vymaže se tím pozice na všech zařízeních.")) {
+                aktualniIndex = 0;
+                document.getElementById("dalsiTlacitko").disabled = false;
+                document.getElementById("dalsiTlacitko").innerText = "Dalších 5 veršů";
+                
+                if (APP_KEY !== "ZDE_VLOZTE_SVUJ_KOD") {
+                    await fetch(`${API_BASE}/UpdateValue/${APP_KEY}/${DATA_KLIC}/0`, {
+                        method: 'POST'
+                    });
+                }
+                
+                zobrazDalsich5(false);
+                aktualizujStatus("Vynulováno");
+            }
+        }
+
+        window.onload = nactiTextBible;
     </script>
 </body>
 </html>
