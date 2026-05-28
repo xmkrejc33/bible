@@ -49,7 +49,7 @@
         button {
             color: white;
             border: none;
-            padding: 12px 24px;
+            padding: 12px 20px;
             font-size: 16px;
             border-radius: 5px;
             cursor: pointer;
@@ -61,6 +61,12 @@
         }
         #dalsiTlacitko:hover {
             background-color: #2980b9;
+        }
+        #predchoziTlacitko {
+            background-color: #f39c12;
+        }
+        #predchoziTlacitko:hover {
+            background-color: #e67e22;
         }
         #resetTlacitko {
             background-color: #e74c3c;
@@ -89,6 +95,7 @@
     </div>
 
     <div class="tlacitka">
+        <button id="predchoziTlacitko" onclick="zobrazPredchozich5()" disabled>Předchozích 5</button>
         <button id="dalsiTlacitko" onclick="zobrazDalsich5()" disabled>Dalších 5 veršů</button>
         <button id="resetTlacitko" onclick="resetovatCteni()" disabled>Od začátku</button>
     </div>
@@ -100,7 +107,7 @@
         // ==========================================
 
         const API_BASE = "https://keyvalue.immanuel.co/api/KeyVal";
-        const DATA_KLIC = "pozice_cteni"; // Pod tímto slovem se uloží vaše číslo
+        const DATA_KLIC = "pozice_cteni";
         
         let vsechnyVerse = [];
         let aktualniIndex = 0;
@@ -109,7 +116,6 @@
         // Načtení textu a pozice z cloudu
         async function nactiTextBible() {
             try {
-                // 1. Načtení samotných textů z GitHubu
                 const odpoved = await fetch('bible.txt');
                 if (!odpoved.ok) throw new Error("Soubor bible.txt se nepodařilo najít.");
                 
@@ -118,16 +124,14 @@
                     .map(radek => radek.trim())
                     .filter(radek => /^[0-9]/.test(radek));
                 
-                // 2. Kontrola, zda uživatel zadal kód
                 if (APP_KEY === "ZDE_VLOZTE_SVUJ_KOD" || APP_KEY === "") {
                     document.getElementById("statusCteni").innerHTML = "<span style='color:red'>Upozornění: Nevložili jste kód schránky. Čtení se nebude ukládat.</span>";
                 } else {
-                    // 3. Přečtení uložené pozice z immanuel.co
                     try {
                         const cloudOdpoved = await fetch(`${API_BASE}/GetValue/${APP_KEY}/${DATA_KLIC}`);
                         if (cloudOdpoved.ok) {
                             const textOdpovedi = await cloudOdpoved.text();
-                            const cistaHodnota = textOdpovedi.replace(/["\s]/g, ''); // Odstranění formátování
+                            const cistaHodnota = textOdpovedi.replace(/["\s]/g, ''); 
                             
                             if (cistaHodnota !== "null" && cistaHodnota !== "") {
                                 const ulozenaHodnota = parseInt(cistaHodnota, 10);
@@ -141,8 +145,6 @@
                     }
                 }
 
-                // Povolení tlačítek a první zobrazení
-                document.getElementById("dalsiTlacitko").disabled = false;
                 document.getElementById("resetTlacitko").disabled = false;
                 
                 aktualizujStatus("Načteno z cloudu");
@@ -155,10 +157,11 @@
             }
         }
 
-        // Zobrazení 5 veršů a odeslání pozice do cloudu
+        // Zobrazení 5 veršů (směr dopředu)
         async function zobrazDalsich5(ulozitDoCloudu = true) {
             const kontejner = document.getElementById("zobrazeni-versu");
-            const tlacitko = document.getElementById("dalsiTlacitko");
+            const tlacitkoDalsi = document.getElementById("dalsiTlacitko");
+            const tlacitkoPredchozi = document.getElementById("predchoziTlacitko");
             
             if (vsechnyVerse.length === 0) return;
             kontejner.innerHTML = ""; 
@@ -172,11 +175,22 @@
                 kontejner.appendChild(odstavec);
             }
 
+            // Posuneme index pro příští kliknutí dopředu
             aktualniIndex += pocetNaKliknuti;
 
+            // Správa tlačítek podle toho, kde se v textu nacházíme
             if (aktualniIndex >= vsechnyVerse.length) {
-                tlacitko.innerText = "Jste na konci textu";
-                tlacitko.disabled = true;
+                tlacitkoDalsi.innerText = "Konec textu";
+                tlacitkoDalsi.disabled = true;
+            } else {
+                tlacitkoDalsi.innerText = "Dalších 5 veršů";
+                tlacitkoDalsi.disabled = false;
+            }
+
+            if (aktualniIndex <= pocetNaKliknuti) {
+                tlacitkoPredchozi.disabled = true;
+            } else {
+                tlacitkoPredchozi.disabled = false;
             }
 
             // Odeslání nové pozice do nástěnky
@@ -193,12 +207,24 @@
             }
         }
 
+        // Krok zpět
+        async function zobrazPredchozich5() {
+            // Protože zobrazení přidalo +5, musíme odečíst 10, abychom se dostali na začátek předchozího bloku
+            aktualniIndex = Math.max(0, aktualniIndex - (pocetNaKliknuti * 2));
+            
+            // Nyní zavoláme standardní funkci, která verše vykreslí a sama si index zase o 5 posune
+            await zobrazDalsich5(true);
+        }
+
         function aktualizujStatus(zprava) {
             const statusZáložka = document.getElementById("statusCteni");
-            if (aktualniIndex === 0) {
-                statusZáložka.innerText = "Čtete od začátku";
+            // Odečítáme 5 (nebo méně), abychom uživateli ukázali číslo prvního právě zobrazeného verše
+            let zobrazenyVersCislo = Math.max(1, aktualniIndex - pocetNaKliknuti + 1);
+            
+            if (aktualniIndex <= pocetNaKliknuti) {
+                statusZáložka.innerText = `${zprava} (čtete od začátku)`;
             } else {
-                statusZáložka.innerText = `${zprava} (čekají verše od pozice ${aktualniIndex + 1})`;
+                statusZáložka.innerText = `${zprava} (od verše ${zobrazenyVersCislo})`;
             }
         }
 
@@ -207,6 +233,7 @@
                 aktualniIndex = 0;
                 document.getElementById("dalsiTlacitko").disabled = false;
                 document.getElementById("dalsiTlacitko").innerText = "Dalších 5 veršů";
+                document.getElementById("predchoziTlacitko").disabled = true;
                 
                 if (APP_KEY !== "ZDE_VLOZTE_SVUJ_KOD") {
                     await fetch(`${API_BASE}/UpdateValue/${APP_KEY}/${DATA_KLIC}/0`, {
