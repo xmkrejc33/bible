@@ -6,11 +6,9 @@
     <title>Čtení Bible</title>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f9f9f9; color: #333; max-width: 700px; margin: 50px auto; padding: 20px; line-height: 1.6; }
-        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; font-size: 1.5em; }
-        .status-cteni { text-align: center; color: #7f8c8d; font-size: 0.9em; margin-bottom: 25px; }
-        #zobrazeni-versu { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); min-height: 200px; margin-bottom: 20px; }
-        .vers { margin-bottom: 10px; }
-        .kniha-nadpis { font-weight: bold; color: #34495e; text-transform: uppercase; margin-top: 15px; margin-bottom: 10px; border-bottom: 2px solid #3498db; display: inline-block; }
+        h1 { text-align: center; color: #2c3e50; margin-bottom: 5px; font-size: 1.4em; }
+        #zobrazeni-versu { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .vers { margin-bottom: 8px; }
         .tlacitka { text-align: center; }
         button { color: white; border: none; padding: 12px 20px; font-size: 16px; border-radius: 5px; cursor: pointer; margin: 5px; }
         #dalsiTlacitko { background-color: #3498db; }
@@ -22,98 +20,73 @@
 <body>
 
     <h1 id="nadpisKnihy">Načítání...</h1>
-    <div id="statusCteni" class="status-cteni"></div>
-    
     <div id="zobrazeni-versu"></div>
 
     <div class="tlacitka">
-        <button id="predchoziTlacitko" onclick="zobrazPredchozich5()" disabled>Předchozích 5</button>
-        <button id="dalsiTlacitko" onclick="zobrazDalsich5()" disabled>Dalších 5 veršů</button>
-        <button id="resetTlacitko" onclick="resetovatCteni()" disabled>Od začátku</button>
+        <button id="predchoziTlacitko" onclick="posun(-5)" disabled>Předchozích 5</button>
+        <button id="dalsiTlacitko" onclick="posun(5)" disabled>Dalších 5 veršů</button>
     </div>
 
     <script>
         const APP_KEY = "db697h0o"; 
         const API_BASE = "https://keyvalue.immanuel.co/api/KeyVal";
-        const DATA_KLIC = "pozice_cteni";
         
-        let obsahSouboru = []; // Bude obsahovat vše (knihy i verše)
-        let aktualniPoziceVPolia = 0; // Index v poli obsahSouboru
-        let skutecnyIndexVerse = 0; // Počítadlo pro cloud (aby se neukládala pozice nadpisu)
+        let vsechnyRadky = [];
+        let indexVerše = 0; // Kolikátý verš v pořadí celkově čteme
 
-        async function nactiTextBible() {
-            const odpoved = await fetch('bible.txt');
-            const celyText = await odpoved.text();
-            // Rozdělíme řádky, zahodíme prázdné
-            obsahSouboru = celyText.split(/\r?\n/).map(r => r.trim()).filter(r => r.length > 0);
+        async function init() {
+            const resp = await fetch('bible.txt');
+            const text = await resp.text();
+            vsechnyRadky = text.split(/\r?\n/);
             
-            // Načtení pozice
-            const cloudOdpoved = await fetch(`${API_BASE}/GetValue/${APP_KEY}/${DATA_KLIC}`);
-            const val = await cloudOdpoved.text();
-            skutecnyIndexVerse = parseInt(val.replace(/["\s]/g, ''), 10) || 0;
+            // Načtení pozice z cloudu
+            const cloud = await fetch(`${API_BASE}/GetValue/${APP_KEY}/pozice`);
+            const val = await cloud.text();
+            indexVerše = parseInt(val.replace(/["\s]/g, ''), 10) || 0;
             
-            // Najdeme pozici v poli obsahSouboru odpovídající verši
-            najdiIndexVpoli();
-            zobrazDalsich5(false);
+            vykresli();
         }
 
-        function najdiIndexVpoli() {
-            let nalezeneVerse = 0;
-            for(let i = 0; i < obsahSouboru.length; i++) {
-                if (/^[0-9]/.test(obsahSouboru[i])) {
-                    if (nalezeneVerse === skutecnyIndexVerse) {
-                        aktualniPoziceVPolia = i;
-                        return;
-                    }
-                    nalezeneVerse++;
-                }
-            }
-        }
-
-        async function zobrazDalsich5(ulozit = true) {
+        function vykresli() {
             const kontejner = document.getElementById("zobrazeni-versu");
             kontejner.innerHTML = "";
-            let vypsaneVerse = 0;
             let nalezeneKnihy = new Set();
-            let i = aktualniPoziceVPolia;
-            let lastKniha = "";
+            let nacteneVerse = 0;
+            let aktualniKniha = "Neznámá kniha";
+            let vSmycceVerse = 0;
 
-            while(vypsaneVerse < 5 && i < obsahSouboru.length) {
-                if (!/^[0-9]/.test(obsahSouboru[i])) {
-                    lastKniha = obsahSouboru[i];
+            for (let radek of vsechnyRadky) {
+                let r = radek.trim();
+                if (r === "") continue;
+
+                if (/^[0-9]/.test(r)) {
+                    // Je to verš
+                    if (vSmycceVerse >= indexVerše && vSmycceVerse < indexVerše + 5) {
+                        const p = document.createElement("p");
+                        p.className = "vers";
+                        p.innerText = r;
+                        kontejner.appendChild(p);
+                        nalezeneKnihy.add(aktualniKniha);
+                    }
+                    vSmycceVerse++;
                 } else {
-                    if (lastKniha) nalezeneKnihy.add(lastKniha);
-                    const p = document.createElement("p");
-                    p.className = "vers";
-                    p.innerText = obsahSouboru[i];
-                    kontejner.appendChild(p);
-                    vypsaneVerse++;
-                    i++;
+                    // Je to název knihy
+                    aktualniKniha = r;
                 }
             }
 
-            // Aktualizace nadpisu
             document.getElementById("nadpisKnihy").innerText = Array.from(nalezeneKnihy).join(" - ");
-            
-            if (ulozit) {
-                skutecnyIndexVerse += vypsaneVerse;
-                aktualniPoziceVPolia = i;
-                await fetch(`${API_BASE}/UpdateValue/${APP_KEY}/${DATA_KLIC}/${skutecnyIndexVerse}`, {method: 'POST'});
-            }
-            aktualizujTlacitka();
+            document.getElementById("predchoziTlacitko").disabled = (indexVerše <= 0);
+            document.getElementById("dalsiTlacitko").disabled = (vSmycceVerse <= indexVerše + 5);
         }
 
-        function zobrazPredchozich5() {
-            // Logika pro posun zpět... (zde by se vracel skutecnyIndexVerse o 10 a volalo zobrazení)
-            // Pro zachování stručnosti kódu doporučuji po kliknutí zpět prostě vyhledat index znova.
+        async function posun(smer) {
+            indexVerše = Math.max(0, indexVerše + smer);
+            vykresli();
+            await fetch(`${API_BASE}/UpdateValue/${APP_KEY}/pozice/${indexVerše}`, {method: 'POST'});
         }
 
-        function aktualizujTlacitka() {
-            document.getElementById("dalsiTlacitko").disabled = (aktualniPoziceVPolia >= obsahSouboru.length);
-            document.getElementById("predchoziTlacitko").disabled = (skutecnyIndexVerse <= 0);
-        }
-
-        window.onload = nactiTextBible;
+        window.onload = init;
     </script>
 </body>
 </html>
