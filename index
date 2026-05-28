@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Čtení Bible (ČEP)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f9f9f9;
+            color: #333;
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+        }
+        #zobrazeni-versu {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            min-height: 200px;
+            margin-bottom: 20px;
+            font-size: 1.1em;
+        }
+        .vers {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .vers:last-child {
+            border-bottom: none;
+        }
+        .tlacitka {
+            text-align: center;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .nacitani {
+            color: #7f8c8d;
+            font-style: italic;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Český ekumenický překlad</h1>
+    
+    <div id="zobrazeni-versu">
+        <p class="nacitani">Načítám texty ze souboru bible.txt...</p>
+    </div>
+
+    <div class="tlacitka">
+        <button id="dalsiTlacitko" onclick="zobrazDalsich5()" disabled>Dalších 5 veršů</button>
+    </div>
+
+    <script>
+        let vsechnyVerse = [];
+let aktualniIndex = 0;
+const pocetNaKliknuti = 5;
+
+// Funkce pro načtení textového souboru z GitHubu
+async function nactiTextBible() {
+    try {
+        const odpoved = await fetch('bible.txt');
+        
+        if (!odpoved.ok) {
+            throw new Error("Soubor se nepodařilo najít.");
+        }
+        
+        const celyText = await odpoved.text();
+        
+        // Rozdělení textu, ořezání mezer a filtrace pomocí regulárního výrazu
+        vsechnyVerse = celyText.split(/\r?\n/)
+            .map(radek => radek.trim()) // Odstraní mezery a neviditelné znaky na začátku a konci
+            .filter(radek => /^[0-9]/.test(radek)); // Propustí POUZE řádky začínající číslem 0-9
+        
+        // Povolení tlačítka a zobrazení první pětice
+        document.getElementById("dalsiTlacitko").disabled = false;
+        document.getElementById("zobrazeni-versu").innerHTML = ""; // Vymaže hlášku o načítání
+        zobrazDalsich5();
+
+    } catch (chyba) {
+        document.getElementById("zobrazeni-versu").innerHTML = 
+            `<p style="color: red; text-align: center;">Chyba: Nepodařilo se načíst soubor <b>bible.txt</b>. Ujistěte se, že je nahraný v repozitáři.</p>`;
+    }
+}
+
+// Funkce pro zobrazení další dávky veršů
+function zobrazDalsich5() {
+    const kontejner = document.getElementById("zobrazeni-versu");
+    const tlacitko = document.getElementById("dalsiTlacitko");
+    
+    kontejner.innerHTML = ""; // Vymazání stávajících veršů
+
+    const konecIndex = Math.min(aktualniIndex + pocetNaKliknuti, vsechnyVerse.length);
+
+    for (let i = aktualniIndex; i < konecIndex; i++) {
+        const odstavec = document.createElement("p");
+        odstavec.className = "vers";
+        odstavec.innerText = vsechnyVerse[i]; 
+        kontejner.appendChild(odstavec);
+    }
+
+    aktualniIndex += pocetNaKliknuti;
+
+    // Kontrola konce souboru
+    if (aktualniIndex >= vsechnyVerse.length) {
+        tlacitko.innerText = "Jste na konci textu";
+        tlacitko.disabled = true;
+    }
+}
+
+// Spuštění načítání ihned po otevření stránky
+window.onload = nactiTextBible;
+    </script>
+</body>
+</html>
